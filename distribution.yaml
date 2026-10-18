@@ -1,0 +1,49 @@
+# Hermes profile distribution manifest for the Application Security Engineer role.
+# Install:  hermes profile install https://github.com/wservices/agent-application-security-engineer.git
+# Fields validated against hermes_cli/profile_distribution.py (Hermes 0.21.x).
+
+name: application-security-engineer
+version: 0.1.0
+description: >-
+  Application Security Engineer: secures the SDLC. Performs manual secure code
+  review mapped to OWASP ASVS / Top 10 and CWE, orchestrates and triages SAST
+  (semgrep, bandit) and authorized DAST against an owned app (OWASP ZAP, nikto),
+  runs dependency / software-composition (SCA) scans (trivy, grype, osv-scanner)
+  and supply-chain review (lockfiles, SBOM, provenance), and builds STRIDE threat
+  models of features and designs. Advisory only: it reports findings with concrete
+  fixes, severities, and CWE mapping — it does not block merges or run exploit
+  payloads beyond authorized DAST against an owned target. Hands exploitable
+  findings to the pentester for validation and escalates to the Security Team
+  Lead. (Kanban decomposer: routes secure-code-review / SAST / DAST / SCA /
+  supply-chain / threat-modeling / appsec-reporting tasks here.)
+hermes_requires: ">=0.21.0"
+author: Pascal (pascal), Hermes Agent
+license: MIT
+
+# config.yaml is intentionally NOT distribution-owned, so installing this role
+# never overwrites the user's model/provider choice. The role layers SOUL.md,
+# skills/, and the env vars below onto the user's base config.
+distribution_owned:
+  - SOUL.md
+  - skills
+  - distribution.yaml
+  - changelogs           # release notes rendered on `hermes profile update`
+
+# Credentials the role needs. Hermes generates a .env.EXAMPLE from these; the
+# user fills a real .env (never committed) and forwards the names via
+# docker_forward_env into the Kali sandbox. All are optional — an unset var only
+# disables the feature that needs it. Use read-only / least-privilege tokens.
+# Values are never logged.
+env_requires:
+  - name: SEMGREP_APP_TOKEN
+    required: false
+    description: "Optional Semgrep AppSec Platform token (pulls managed rulesets/policies; omit to run local rules only)"
+  - name: SNYK_TOKEN
+    required: false
+    description: "Optional Snyk API token for SCA/known-vuln lookups (read-only; omit to use trivy/grype/osv-scanner only)"
+  - name: GITHUB_TOKEN
+    required: false
+    description: "Optional read-only GitHub token (repo + security_events) for dependency/SCA review of repos; never a write scope"
+  - name: NVD_API_KEY
+    required: false
+    description: "Optional NVD API key (raises CVE-lookup rate limit 5->50/30s when enriching advisories)"

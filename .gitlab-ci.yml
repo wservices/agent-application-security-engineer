@@ -1,0 +1,7 @@
+include:
+  - project: 'agents/platform'
+    ref: v0.1.2
+    file: '/ci/skill-ci.gitlab-ci.yml'
+
+# Runs skill-metadata validation, repo-structure, yaml/shell/python lint,
+# secret-scan, and the offline pytest scaffold suite. No live DAST/network.

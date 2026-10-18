@@ -1,0 +1,12 @@
+# application-security-engineer role tool layer (APT). Several tools this role
+# drives are NOT apt packages (semgrep, bandit, trivy, grype, syft, osv-scanner,
+# OWASP ZAP) — those are installed out of band; see tools/README.md. Listed here
+# are only the apt-installable tools, so this manifest stays self-sufficient.
+#
+# APT layer:
+nikto             # DAST server-level checks against an owned/authorized target
+jq                # parse/merge scanner JSON (semgrep, trivy, grype, osv, ZAP)
+ripgrep           # provides rg — fast source search for code review / grep sweeps
+# NOT installed here (not apt — see tools/README.md): semgrep (pip), bandit (pip),
+# trivy (binary / vendor apt repo), grype + syft (binary), osv-scanner (binary),
+# OWASP ZAP (zaproxy package / binary / Docker).
