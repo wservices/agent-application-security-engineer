@@ -1,12 +1,12 @@
 ---
 name: dast-orchestration
 description: Authorized DAST of an owned app (ZAP, nikto).
-version: 0.1.0
+version: 0.2.0
 author: Pascal (pascal), Hermes Agent
 license: MIT
 platforms: [linux]
 prerequisites:
-  commands: [zap.sh, nikto, jq]
+  commands: [zap.sh, nikto, jq, python3]
 metadata:
   hermes:
     tags: [appsec, dast, owasp-zap, nikto, authorized, web]
@@ -47,7 +47,14 @@ Pentester.
 terminal(command="zap-baseline.py -t https://staging.example.internal -J evidence/zap-baseline.json -r evidence/zap.html", timeout=1800)
 # nikto server checks, JSON output
 terminal(command="nikto -h https://staging.example.internal -Format json -output evidence/nikto.json", timeout=1800)
+# if ZAP is exported as SARIF, triage it with the same offline summarizer SAST uses
+terminal(command="python3 scripts/sarif_summarize.py --json evidence/zap.sarif > evidence/dast-summary.json", timeout=60)
 ```
+
+The bundled `scripts/sarif_summarize.py` (see `sast-orchestration`) summarizes any
+SARIF v2.1.0 export — including a ZAP SARIF report — offline and read-only:
+dedupe, drop suppressed alerts, roll up by severity. It never replays requests or
+executes anything.
 
 ## Quick Reference
 
@@ -97,3 +104,6 @@ jq -r '.site[].alerts[] | "\(.riskdesc)\t\(.alert)"' evidence/zap.json | sort | 
   recorded.
 - Every reported alert cites the ZAP/nikto alert ID, the URL, and a CWE; the
   target URL in the evidence matches the authorized scope on record.
+- If a ZAP SARIF export is produced,
+  `python3 scripts/sarif_summarize.py --json evidence/zap.sarif | jq -e '.total_findings'`
+  confirms it parsed and gives the de-duplicated alert count.

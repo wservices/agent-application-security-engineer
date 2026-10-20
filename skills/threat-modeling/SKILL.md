@@ -1,12 +1,12 @@
 ---
 name: threat-modeling
 description: STRIDE threat model of a feature or design.
-version: 0.1.0
+version: 0.2.0
 author: Pascal (pascal), Hermes Agent
 license: MIT
 platforms: [linux]
 prerequisites:
-  commands: [rg]
+  commands: [rg, python3]
 metadata:
   hermes:
     tags: [appsec, threat-modeling, stride, design, trust-boundary]
@@ -43,8 +43,31 @@ threat list, and recommends controls; it changes nothing.
 ```bash
 # locate entry points / boundaries to seed the model
 terminal(command="rg -n --no-heading -e 'route\\(|@app\\.|@router|addRoute|listen\\(|Queue|Topic|S3|Bucket' repo/", timeout=60)
-# create the assessment dir, then write the model to threat-model.md
+# create the assessment dir, then describe the system as a small YAML model
 terminal(command="mkdir -p assessments/$ID/evidence", timeout=10)
+# enumerate STRIDE threats per element and render the threat-model table
+terminal(command="python3 scripts/threat_model_stride.py assessments/$ID/model.yaml > assessments/$ID/threat-model.md", timeout=60)
+terminal(command="python3 scripts/threat_model_stride.py --min-priority high assessments/$ID/model.yaml", timeout=60)
+```
+
+`scripts/threat_model_stride.py` is bundled and offline. Given a YAML model of
+`elements` (external / process / datastore) plus `dataflows` and trust
+`boundaries`, it applies the classic STRIDE-per-element mapping, attaches the
+violated property + a CWE family + a suggested mitigation per threat, and raises
+boundary-crossing flows and process privilege-escalation to High priority. It
+reads the model as DATA and renders a Markdown (or `--json`) table to seed the
+hand-written analysis — it does not decide acceptance.
+
+A minimal `model.yaml`:
+
+```yaml
+title: Checkout Service
+elements:
+  - {name: Customer, type: external}
+  - {name: CheckoutAPI, type: process}
+  - {name: OrdersDB, type: datastore}
+dataflows:
+  - {name: submit-order, from: Customer, to: CheckoutAPI, crosses_boundary: true}
 ```
 
 ## Quick Reference
@@ -98,3 +121,7 @@ Elevation of privilege  -> Authorization    (CWE-269, CWE-284)
   a mitigation and residual-risk note.
 - `rg -c . assessments/$ID/threat-model.md` confirms the model was written to the
   assessment dir; each threat cites the element and a CWE family.
+- `python3 scripts/threat_model_stride.py --json assessments/$ID/model.yaml | jq -e '.total'`
+  confirms the model parsed and prints the enumerated-threat count.
+- Behavior contract: `python3 -m pytest tests/test_threat_model_stride.py -q` from
+  the role dir (per-element STRIDE applicability, boundary-crossing priority).

@@ -3,7 +3,7 @@
 # Fields validated against hermes_cli/profile_distribution.py (Hermes 0.21.x).
 
 name: application-security-engineer
-version: 0.1.0
+version: 0.2.0
 description: >-
   Application Security Engineer: secures the SDLC. Performs manual secure code
   review mapped to OWASP ASVS / Top 10 and CWE, orchestrates and triages SAST

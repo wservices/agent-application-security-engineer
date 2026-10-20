@@ -1,12 +1,12 @@
 ---
 name: secure-code-review
 description: Manual secure code review mapped to OWASP and CWE.
-version: 0.1.0
+version: 0.2.0
 author: Pascal (pascal), Hermes Agent
 license: MIT
 platforms: [linux]
 prerequisites:
-  commands: [rg, git, jq]
+  commands: [rg, git, jq, python3]
 metadata:
   hermes:
     tags: [appsec, code-review, owasp, asvs, cwe, sdlc]
@@ -44,7 +44,18 @@ design flaws a scanner misses.
 terminal(command="git -C repo diff --stat origin/main...HEAD", timeout=60)
 # grep high-risk sinks across the changed files
 terminal(command="rg -n --no-heading -e 'exec\\(|eval\\(|subprocess|pickle\\.load|yaml\\.load\\b|os\\.system' repo/", timeout=60)
+# language-aware pass that categorizes risky CONSTRUCTS (eval/exec, shell=True,
+# SQL string-building, pickle/yaml.load, md5/sha1/DES, innerHTML) with CWE + severity
+terminal(command="python3 scripts/secure_code_review.py --json repo/ > evidence/code-review.json", timeout=120)
+# or restrict the pass to a diff's added lines (where new risk is introduced)
+terminal(command="git -C repo diff origin/main...HEAD > evidence/change.patch && python3 scripts/secure_code_review.py --diff evidence/change.patch", timeout=60)
 ```
+
+`scripts/secure_code_review.py` is bundled, offline, and side-effect-free: it
+NEVER imports or runs the analyzed code — it reads text and pattern-matches,
+keyed by file extension. It is a lead generator, not a verdict: each hit must be
+confirmed in context below. It is NOT a secret scanner (the platform owns that).
+Exit `0` = risky constructs found, `1` = clean, `3` = usage error.
 
 ## Quick Reference
 
@@ -94,7 +105,12 @@ rg -n 'requests\\.get\\(|urlopen\\(|fetch\\(' repo/            # SSRF candidates
 ## Verification
 
 - Every reported finding cites a reproducible evidence reference (file + line or
-  commit) and a CWE ID; re-running the listed `rg`/`git` commands reproduces the
-  cited lines.
+  commit) and a CWE ID; re-running the listed `rg`/`git` commands — or
+  `python3 scripts/secure_code_review.py --json repo/` — reproduces the cited lines
+  with a category, CWE, and severity.
+- Behavior contract: `python3 -m pytest tests/test_secure_code_review.py -q` from
+  the role dir proves the detector flags a known-bad snippet (eval/exec, shell,
+  SQL concat, pickle/yaml, md5) and is clean on a safe one (sha256, parameterized
+  query, `safe_load`/explicit `SafeLoader`).
 - `git -C repo diff --stat` confirms no files were modified by the review
   (read-only check: the working tree is unchanged).

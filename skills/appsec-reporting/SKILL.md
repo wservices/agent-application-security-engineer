@@ -1,12 +1,12 @@
 ---
 name: appsec-reporting
 description: AppSec findings report with fixes and CWE.
-version: 0.1.0
+version: 0.2.0
 author: Pascal (pascal), Hermes Agent
 license: MIT
 platforms: [linux]
 prerequisites:
-  commands: [jq, rg]
+  commands: [jq, rg, python3]
 metadata:
   hermes:
     tags: [appsec, reporting, cwe, cvss, remediation, handoff]
@@ -40,11 +40,21 @@ report is **advisory** — it recommends remediation and does not block a merge.
 ## How to Run
 
 ```bash
-# normalise tool outputs into one findings stream for the report
-terminal(command="jq -s '{semgrep: .[0].results, trivy: .[1].results}' evidence/semgrep.json evidence/trivy-fs.json > evidence/merged.json", timeout=60)
+# normalize SAST (SARIF) and SCA (OSV/npm) with the bundled summarizers
+terminal(command="python3 scripts/sarif_summarize.py --json evidence/semgrep.sarif > evidence/sast.json", timeout=60)
+terminal(command="python3 scripts/sca_audit.py --json evidence/osv.json > evidence/sca.json", timeout=60)
+# merge both into one prioritized Markdown report (ranked by severity, with counts)
+terminal(command="python3 scripts/appsec_report_build.py --sast evidence/sast.json --sca evidence/sca.json --title 'Checkout service' -o assessments/$ID/report.md", timeout=60)
 # (optional) render the finished report to PDF via the companion skill
 terminal(command="pandoc assessments/$ID/report.md -o assessments/$ID/report.pdf --pdf-engine=wkhtmltopdf", timeout=120)
 ```
+
+`scripts/appsec_report_build.py` is bundled, offline, and read-only. It consumes
+the JSON from `sarif_summarize.py` (SAST) and/or `sca_audit.py` (SCA), normalizes
+both into one finding shape, ranks everything by severity, and renders a Markdown
+report with a counts table and per-source finding tables. At least one of
+`--sast`/`--sca` is required (else exit `3`). It is advisory output — it never
+gates a merge, and evidence strings are treated as data, never fetched.
 
 ## Quick Reference
 
@@ -95,7 +105,10 @@ jq -r '.[] | [.id,.severity,.cwe] | @tsv' evidence/merged.json   # finding roll-
 
 - `rg -n '^## ' assessments/$ID/report.md` shows all required sections present and
   in order; every finding block has a severity, a CWE, an evidence reference, and
-  a fix.
+  a fix. The generated report leads with a severity-counts table and per-source
+  tables ranked critical-first.
+- Behavior contract: `python3 -m pytest tests/test_appsec_report_build.py -q` from
+  the role dir (SAST+SCA merge, severity ranking, counts, required sections).
 - If a `handoff.yaml` is produced, it parses
   (`python3 -c "import yaml,sys; yaml.safe_load(open('assessments/$ID/handoff.yaml'))"`)
   and names a target, the finding, and the evidence path.

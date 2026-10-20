@@ -1,12 +1,12 @@
 ---
 name: sast-orchestration
 description: Run and triage SAST findings (semgrep, bandit).
-version: 0.1.0
+version: 0.2.0
 author: Pascal (pascal), Hermes Agent
 license: MIT
 platforms: [linux]
 prerequisites:
-  commands: [semgrep, bandit, jq, rg]
+  commands: [semgrep, bandit, jq, rg, python3]
 metadata:
   hermes:
     tags: [appsec, sast, semgrep, bandit, triage, cwe]
@@ -42,11 +42,21 @@ execute the application and does not modify code or CI.
 ## How to Run
 
 ```bash
-# semgrep with the curated security ruleset, JSON output for triage
-terminal(command="semgrep --config p/security-audit --config p/owasp-top-ten --json -o evidence/semgrep.json repo/", timeout=600)
-# bandit for Python code, JSON output
-terminal(command="bandit -r repo/ -f json -o evidence/bandit.json", timeout=300)
+# semgrep with the curated security ruleset; emit SARIF so the summarizer can triage it
+terminal(command="semgrep --config p/security-audit --config p/owasp-top-ten --sarif -o evidence/semgrep.sarif repo/", timeout=600)
+# bandit for Python code, SARIF output
+terminal(command="bandit -r repo/ --format sarif -o evidence/bandit.sarif", timeout=300)
+# triage the SARIF offline: dedupe, drop suppressed, roll up by severity/rule/file
+terminal(command="python3 scripts/sarif_summarize.py --json evidence/semgrep.sarif > evidence/sast-summary.json", timeout=60)
+terminal(command="python3 scripts/sarif_summarize.py --min-severity high evidence/semgrep.sarif", timeout=60)
 ```
+
+`scripts/sarif_summarize.py` is bundled, offline, and read-only: it parses a
+SARIF v2.1.0 file (Semgrep/CodeQL/Bandit/ZAP export), collapses duplicate
+results, drops suppressed/triaged-out results (unless `--include-suppressed`),
+normalizes `level`→severity, and writes a summary for `appsec-reporting`. It
+never executes analyzed code. Exit `0` = findings present, `1` = none, `3` =
+parse error.
 
 ## Quick Reference
 
@@ -92,8 +102,11 @@ jq -r '.results[].extra.metadata.cwe[]?' evidence/semgrep.json | sort | uniq -c 
 
 ## Verification
 
-- `jq -e '.results' evidence/semgrep.json >/dev/null` and
-  `jq -e '.results' evidence/bandit.json >/dev/null` confirm well-formed output.
-- Each forwarded finding carries a `check_id`, a `path:line`, a CWE, and a triage
+- `python3 scripts/sarif_summarize.py --json evidence/semgrep.sarif | jq -e '.total_findings'`
+  returns the de-duplicated finding count and confirms the SARIF parsed; the
+  `suppressed` count shows how many triaged-out results were excluded.
+- Behavior contract: `python3 -m pytest tests/test_sarif_summarize.py -q` from the
+  role dir (dedupe, suppression handling, severity mapping, exit codes).
+- Each forwarded finding carries a rule id, a `path:line`, a CWE, and a triage
   decision; re-running semgrep on a single rule
   (`semgrep --config <rule> repo/path`) reproduces the cited hit.

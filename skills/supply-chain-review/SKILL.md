@@ -1,12 +1,12 @@
 ---
 name: supply-chain-review
 description: Review lockfiles, SBOM, and build provenance.
-version: 0.1.0
+version: 0.2.0
 author: Pascal (pascal), Hermes Agent
 license: MIT
 platforms: [linux]
 prerequisites:
-  commands: [syft, trivy, jq, rg]
+  commands: [syft, trivy, jq, rg, python3]
 metadata:
   hermes:
     tags: [appsec, supply-chain, sbom, lockfile, provenance, slsa]
@@ -48,7 +48,18 @@ CVEs; this one checks how components arrive and are trusted).
 terminal(command="syft dir:repo/ -o cyclonedx-json=evidence/sbom.cdx.json", timeout=600)
 # diff against the previous release's SBOM
 terminal(command="jq -r '.components[] | \"\\(.name)@\\(.version)\"' evidence/sbom.cdx.json | sort > evidence/now.txt && diff <(sort evidence/prev.txt) evidence/now.txt", timeout=60)
+# diff two dependency manifests for added/upgraded/downgraded/removed + unpinned entries
+terminal(command="python3 scripts/dependency_diff.py --json evidence/requirements.prev.txt repo/requirements.txt > evidence/dep-diff.json", timeout=60)
+# gate on supply-chain hygiene: non-zero exit if either manifest has floating versions
+terminal(command="python3 scripts/dependency_diff.py --fail-on-unpinned evidence/requirements.prev.txt repo/requirements.txt", timeout=60)
 ```
+
+`scripts/dependency_diff.py` is bundled, offline, and read-only. It parses
+requirements.txt-style files and lockfile JSON (flat, `dependencies`, or
+npm-lock `{version}`), reports added / upgraded / downgraded / removed / changed
+dependencies, and flags UNPINNED entries (ranges `^ ~ * >=`, or a bare name) in
+either manifest. It never installs or resolves anything. `--fail-on-unpinned`
+returns exit `2` when floating versions exist (otherwise `0`; `3` on error).
 
 ## Quick Reference
 
@@ -100,3 +111,7 @@ jq -r '.components[] | "\\(.name)@\\(.version)"' evidence/sbom.cdx.json | sort
 - Re-generating the SBOM yields the same component set (determinism check), and
   the lockfile-integrity verdict cites the exact file + line for any unpinned or
   hashless entry.
+- `python3 scripts/dependency_diff.py --json <prev> <current> | jq -e '.counts'`
+  confirms the diff ran and prints the added/upgraded/downgraded/unpinned tallies.
+- Behavior contract: `python3 -m pytest tests/test_dependency_diff.py -q` from the
+  role dir (add/remove, up/downgrade, pin-vs-range, unpinned detection, exit codes).
